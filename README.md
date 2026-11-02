@@ -82,12 +82,54 @@ matching Group Policy), piloted one model at a time. Devices that report 1795,
 1802, 1803, or `AvailableUpdates = 0x4004` usually need a BIOS update from the
 PC maker.
 
+## Report: devices with no fix path
+
+`Get-SecureBoot2023Report.ps1` runs on an admin workstation (not as a
+Remediation). It reads every device's detection output from the Remediation,
+through Microsoft Graph or a Device status CSV export, and puts each device in
+one category:
+
+| Category | Meaning |
+|---|---|
+| No fix path | Firmware-blocked, and the PC maker has no BIOS update planned. Replace, or document as an exception. |
+| Needs BIOS update | Firmware-blocked, and a BIOS with the 2023 certificates exists. |
+| Blocked - check OEM | Firmware-blocked; the model hasn't been looked up yet. |
+| IT action | Not finished, but no BIOS needed (trigger the policy, restart, patch, re-enable the task). |
+| Investigate / No result yet / Updated / Not applicable | As named. |
+
+Firmware-blocked means event 1803, 1795 or 1802, `AvailableUpdates` stuck at
+`0x4004`, or confidence "Not Supported - Known Limitation" / "Temporarily Paused".
+
+A device can't report whether its maker plans a BIOS update, so that comes from
+`oem-model-status.csv`. The first run creates it with each firmware-blocked model
+and a link to that maker's Secure Boot page. Set `OemStatus` to `NoBiosPlanned`
+or `BiosAvailable` (with the version in `FixedInBios`), then run the report
+again. Later runs add newly seen models without touching your entries.
+
+"No BIOS planned" alone doesn't mean a PC can't get the certificates. Windows
+Update can still install them on many of those models (see Dell KB 000378734),
+so only devices that are also firmware-blocked land in "No fix path".
+
+```powershell
+Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
+.\Get-SecureBoot2023Report.ps1 -RemediationName '<your Remediation name>'
+# or, from an export of the Remediation's Device status page:
+.\Get-SecureBoot2023Report.ps1 -InputCsv .\DeviceStatus.csv
+```
+
+Graph mode uses the delegated, read-only permissions
+`DeviceManagementScripts.Read.All` and `DeviceManagementManagedDevices.Read.All`.
+Output (in `.\SecureBoot2023-Report`): all devices, the firmware-blocked list for
+the service desk, and a by-model summary.
+
 ## Testing
 
-Tested against 24 simulated scenarios (PowerShell 7 with the Windows cmdlets
-mocked), and checked for Windows PowerShell 5.1 syntax compatibility with
-PSScriptAnalyzer. Run it on a few PCs whose state you already know before a
-broad rollout.
+The detection script was tested against 24 simulated scenarios (PowerShell 7 with
+the Windows cmdlets mocked). The report was tested with 34 checks covering CSV
+input, the PC-maker table across repeated runs, and Graph paging with mocked Graph
+cmdlets. Both pass the PSScriptAnalyzer syntax check for Windows PowerShell 5.1.
+Neither has run against a real tenant or PC yet. Try them on devices whose state
+you already know before a broad rollout.
 
 ## References
 

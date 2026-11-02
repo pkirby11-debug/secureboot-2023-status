@@ -113,7 +113,7 @@ so only devices that are also firmware-blocked land in "No fix path".
 ```powershell
 Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
 .\Get-SecureBoot2023Report.ps1 -RemediationName '<your Remediation name>'
-# or, from an export of the Remediation's Device status page:
+# or, with no Graph permissions, from an export of the Remediation's Device status page:
 .\Get-SecureBoot2023Report.ps1 -InputCsv .\DeviceStatus.csv
 ```
 
@@ -125,9 +125,9 @@ the service desk, and a by-model summary.
 ## Testing
 
 The detection script was tested against 24 simulated scenarios (PowerShell 7 with
-the Windows cmdlets mocked). The report was tested with 34 checks covering CSV
-input, the PC-maker table across repeated runs, and Graph paging with mocked Graph
-cmdlets. Both pass the PSScriptAnalyzer syntax check for Windows PowerShell 5.1.
+the Windows cmdlets mocked). The report was tested with 37 checks covering CSV
+input (including Intune's export column names), the PC-maker table across repeated
+runs, and Graph paging with mocked Graph cmdlets. Both pass the PSScriptAnalyzer syntax check for Windows PowerShell 5.1.
 Neither has run against a real tenant or PC yet. Try them on devices whose state
 you already know before a broad rollout.
 

@@ -197,9 +197,18 @@ if ($PSCmdlet.ParameterSetName -eq 'Csv') {
     $outCol = $cols | Where-Object { $_ -match 'pre.*detection.*output' } | Select-Object -First 1
     if (-not $outCol) { $outCol = $cols | Where-Object { $_ -match 'detection.*output' -and $_ -notmatch 'post' } | Select-Object -First 1 }
     if (-not $outCol) { $outCol = $cols | Where-Object { $_ -match 'output' -and $_ -notmatch 'post|error' } | Select-Object -First 1 }
-    $userCol   = $cols | Where-Object { $_ -match 'upn|user\s*principal|primary\s*user|^\s*user' } | Select-Object -First 1
+    # Pick columns by preference, so a UserId GUID or the agent's check-in time isn't used by mistake
+    $userCol = $null
+    foreach ($pattern in '^\s*upn\s*$', 'user\s*principal', 'primary\s*user', '^\s*user\s*name\s*$', 'upn') {
+        $userCol = $cols | Where-Object { $_ -match $pattern } | Select-Object -First 1
+        if ($userCol) { break }
+    }
+    $lastCol = $null
+    foreach ($pattern in 'last\s*state\s*update', '^\s*modified\s*time\s*$', 'last\s*run', '^\s*last\s*updated\s*$', 'modified') {
+        $lastCol = $cols | Where-Object { $_ -match $pattern } | Select-Object -First 1
+        if ($lastCol) { break }
+    }
     $serialCol = $cols | Where-Object { $_ -match 'serial' } | Select-Object -First 1
-    $lastCol   = $cols | Where-Object { $_ -match 'last.*(state|update|run|modified)|modified' } | Select-Object -First 1
 
     if (-not $nameCol -or -not $outCol) {
         throw ("Couldn't find the device name and detection output columns in {0}. Columns found: {1}" -f $InputCsv, ($cols -join ', '))

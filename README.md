@@ -82,23 +82,39 @@ matching Group Policy), piloted one model at a time. Devices that report 1795,
 1802, 1803, or `AvailableUpdates = 0x4004` usually need a BIOS update from the
 PC maker.
 
-## Report: devices with no fix path
+## Report: what to do with each device
 
 `Get-SecureBoot2023Report.ps1` runs on an admin workstation (not as a
 Remediation). It reads every device's detection output from the Remediation,
-through Microsoft Graph or a Device status CSV export, and puts each device in
-one category:
+through Microsoft Graph or a Device status CSV export, keeps one row per device,
+and puts each device in one category:
 
 | Category | Meaning |
 |---|---|
 | No fix path | Firmware-blocked, and the PC maker has no BIOS update planned. Replace, or document as an exception. |
 | Needs BIOS update | Firmware-blocked, and a BIOS with the 2023 certificates exists. |
 | Blocked - check OEM | Firmware-blocked; the model hasn't been looked up yet. |
-| IT action | Not finished, but no BIOS needed (trigger the policy, restart, patch, re-enable the task). |
-| Investigate / No result yet / Updated / Not applicable | As named. |
+| Restart | Windows is waiting on a reboot (`0x4100`, event 1800, or error `0x8007015E` "reboot required"). |
+| Windows 10 not patching | Stuck at 19045.6456 (October 2025, the last update without ESU) or earlier. Upgrade, enroll in ESU, or replace. |
+| Behind on updates | Older build than most of the fleet, or no Secure Boot servicing data. Fix patching first. |
+| Start the update | Patched, but nothing has started the update. Add it to the Enable Secureboot Certificate Updates policy. |
+| Virtual machines | VMs that haven't finished. For pooled hosts such as Azure Virtual Desktop, fix the golden image. |
+| Secure Boot off / Legacy BIOS | The certificates don't apply until Secure Boot can be turned on. |
+| Investigate / No result yet / In progress / Updated | As named. |
 
 Firmware-blocked means event 1803, 1795 or 1802, `AvailableUpdates` stuck at
-`0x4004`, or confidence "Not Supported - Known Limitation" / "Temporarily Paused".
+`0x4004` without a pending reboot, or confidence "Not Supported - Known
+Limitation" / "Temporarily Paused".
+
+A Remediation assigned to user groups records one row per signed-in user, so
+shared PCs repeat in the export. The report keeps one row per device name (the
+newest result wins) and lists every user on it. Assigning the Remediation to a
+device group gives one row per device at the source.
+
+The `PatchLevel` column compares each device's build with the two most common
+builds for its Windows version among updated devices in the same data, so
+"behind" is measured against your own fleet. It also notes Windows versions whose
+Enterprise updates have ended (for example Windows 11 23H2 after November 10, 2026).
 
 A device can't report whether its maker plans a BIOS update, so that comes from
 `oem-model-status.csv`. The first run creates it with each firmware-blocked model
@@ -119,17 +135,32 @@ Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
 
 Graph mode uses the delegated, read-only permissions
 `DeviceManagementScripts.Read.All` and `DeviceManagementManagedDevices.Read.All`.
-Output (in `.\SecureBoot2023-Report`): all devices, the firmware-blocked list for
-the service desk, and a by-model summary.
+
+Optional: `-VendorPattern` takes a regular expression for vendor-managed systems
+(for example medical imaging workstations), matched against device names and
+users. Matching devices get a note to check with the vendor before changing them.
+
+Output (in `.\SecureBoot2023-Report`):
+
+- `SecureBoot2023-AllDevices-*.csv` - every device, with Category, Action and PatchLevel
+- `SecureBoot2023-ActionList-*.csv` - every device that isn't Updated
+- `SecureBoot2023-FirmwareBlocked-*.csv` - the service desk list (first three categories)
+- `SecureBoot2023-Models-*.csv` - counts by model, for BIOS lookups and refresh planning
+
+Run it on the CSV exactly as Intune exports it. Re-saving the CSV in Excel
+changes timestamps and can trim trailing zeros from numbers.
 
 ## Testing
 
 The detection script was tested against 24 simulated scenarios (PowerShell 7 with
-the Windows cmdlets mocked). The report was tested with 37 checks covering CSV
-input (including Intune's export column names), the PC-maker table across repeated
-runs, and Graph paging with mocked Graph cmdlets. Both pass the PSScriptAnalyzer syntax check for Windows PowerShell 5.1.
-Neither has run against a real tenant or PC yet. Try them on devices whose state
-you already know before a broad rollout.
+the Windows cmdlets mocked). The report was tested with 54 checks: the category,
+action and patch level for 39 device patterns (including ones seen in a real
+fleet export), one-row-per-device merging, the PC-maker table across repeated
+runs, Intune's export column names, and Graph paging with mocked Graph cmdlets.
+Its categories were also compared device by device against a manual review of a
+large real-world export, and all matched. Both scripts pass the
+PSScriptAnalyzer syntax check for Windows PowerShell 5.1. Try them on devices
+whose state you already know before a broad rollout.
 
 ## References
 
